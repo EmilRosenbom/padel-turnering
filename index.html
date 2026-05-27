@@ -93,9 +93,7 @@
   <h1>🎾 Paddeltennis Turnering</h1>
   <p>Lørdag kl. 12:00</p>
   <span class="badge">Tilmeld dig herunder</span>
-  <div id="adminBtnContainer" style="position:absolute;top:10px;right:10px;display:flex;gap:6px;align-items:center;">
-    <button id="adminBtn" style="background:rgba(255,255,255,0.2);color:white;border:1px solid white;padding:6px 12px;border-radius:6px;font-size:0.8rem;cursor:pointer;transition:all 0.15s;white-space:nowrap;">🔒 Admin</button>
-  </div>
+  <button id="adminBtn" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid white;padding:6px 12px;border-radius:6px;font-size:0.8rem;cursor:pointer;transition:all 0.15s;">🔒 Admin</button>
 </header>
 
 <main>
@@ -183,6 +181,31 @@
 
 <div id="toast" class="toast"></div>
 
+<!-- Admin Login Screen -->
+<div id="adminLoginScreen" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--green-pale);z-index:10000;overflow:auto;">
+  <div style="max-width:400px;margin:60px auto;background:white;border-radius:12px;padding:40px;box-shadow:0 10px 40px rgba(0,0,0,0.1);">
+    <h1 style="font-size:2rem;margin-bottom:10px;color:var(--green);">🔐 Admin</h1>
+    <p style="color:var(--muted);margin-bottom:30px;">Adgangskode påkrævet</p>
+    <input type="password" id="adminLoginPassword" placeholder="Adgangskode" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:16px;font-size:1rem;" />
+    <button id="adminLoginBtn" style="width:100%;padding:13px;background:var(--green);color:white;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;">Login</button>
+  </div>
+</div>
+
+<!-- Admin Dashboard -->
+<div id="adminDashboard" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#f5f5f5;z-index:10000;overflow:auto;">
+  <header style="background:var(--green);color:white;padding:20px;display:flex;justify-content:space-between;align-items:center;">
+    <h1 style="font-size:1.5rem;">⚙️ Admin Panel</h1>
+    <button id="adminLogoutBtn" style="background:rgba(255,255,255,0.2);color:white;border:1px solid white;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;">Log ud</button>
+  </header>
+
+  <main style="max-width:900px;margin:0 auto;padding:24px 16px;">
+    <div style="background:white;border-radius:12px;padding:24px;margin-bottom:24px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+      <h2 style="font-size:1.3rem;margin-bottom:20px;color:var(--green);">Deltager (i alt: <span id="adminParticipantCount">0</span>)</h2>
+      <div id="adminParticipantList" style="display:flex;flex-direction:column;gap:12px;"></div>
+    </div>
+  </main>
+</div>
+
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
   import { getDatabase, ref, push, remove, onValue, serverTimestamp }
@@ -216,6 +239,22 @@
 
   // Initialize admin UI
   updateAdminUI();
+  document.getElementById('adminBtn').onclick = window.openAdminLogin;
+  document.getElementById('adminLoginBtn').onclick = window.loginAdmin;
+  document.getElementById('adminLoginPassword').onkeypress = (e) => {
+    if (e.key === 'Enter') window.loginAdmin();
+  };
+  document.getElementById('adminLogoutBtn').onclick = window.logoutAdmin;
+
+  // Restore admin status on load
+  if (localStorage.getItem('padel_admin') === 'true') {
+    window.isAdmin = true;
+    setTimeout(() => {
+      document.getElementById('adminLoginScreen').style.display = 'none';
+      document.getElementById('adminDashboard').style.display = 'block';
+      document.getElementById('adminBtn').style.display = 'none';
+    }, 100);
+  }
 
   // ── Live listener ──────────────────────────────────────────────────────────
   setStatus('connecting','Forbinder...');
@@ -223,6 +262,7 @@
     participants = [];
     snap.forEach(child => { participants.push({ _key: child.key, ...child.val() }); });
     render();
+    if (window.isAdmin) renderAdminDashboard();
     setStatus('connected', 'Forbundet · ' + participants.length + ' tilmeldt');
   }, err => setStatus('error','Fejl: ' + err.message));
 
@@ -255,71 +295,78 @@
 
   // ── Admin functions ───────────────────────────────────────────────────────
   window.openAdminLogin = () => {
-    const container = document.getElementById('adminBtnContainer');
-    const btn = document.getElementById('adminBtn');
-    btn.style.display = 'none';
-
-    const input = document.createElement('input');
-    input.id = 'adminPasswordInput';
-    input.type = 'password';
-    input.placeholder = 'Kode...';
-    input.style.cssText = 'background:rgba(255,255,255,0.9);color:#333;border:1px solid white;padding:6px 8px;border-radius:6px;font-size:0.8rem;width:120px;transition:all 0.15s;';
-    input.onkeypress = (e) => {
-      if (e.key === 'Enter') window.loginAdmin();
-    };
-    input.onblur = () => {
-      setTimeout(() => {
-        if (document.activeElement !== input) {
-          input.remove();
-          btn.style.display = '';
-        }
-      }, 100);
-    };
-
-    container.appendChild(input);
-    input.focus();
+    document.getElementById('adminLoginScreen').style.display = 'block';
+    document.getElementById('adminLoginPassword').value = '';
+    document.getElementById('adminLoginPassword').focus();
   };
   window.loginAdmin = () => {
-    const input = document.getElementById('adminPasswordInput');
-    const pwd = input.value;
+    const pwd = document.getElementById('adminLoginPassword').value;
     if (pwd === ADMIN_PASSWORD) {
       window.isAdmin = true;
       localStorage.setItem('padel_admin', 'true');
+      document.getElementById('adminLoginScreen').style.display = 'none';
+      document.getElementById('adminDashboard').style.display = 'block';
+      document.getElementById('adminBtn').style.display = 'none';
+      renderAdminDashboard();
       showToast('✅ Admin login velykket');
-      updateAdminUI();
-      render();
-      input.remove();
     } else {
       showToast('❌ Forkert adgangskode');
-      input.value = '';
-      input.focus();
+      document.getElementById('adminLoginPassword').value = '';
+      document.getElementById('adminLoginPassword').focus();
     }
   };
   window.logoutAdmin = () => {
     window.isAdmin = false;
     localStorage.removeItem('padel_admin');
-    updateAdminUI();
-    render();
+    document.getElementById('adminDashboard').style.display = 'none';
+    document.getElementById('adminLoginScreen').style.display = 'none';
+    document.getElementById('adminBtn').style.display = '';
     showToast('Logget ud');
   };
+
+  function renderAdminDashboard() {
+    const list = document.getElementById('adminParticipantList');
+    const count = document.getElementById('adminParticipantCount');
+    count.textContent = participants.length;
+
+    if (!participants.length) {
+      list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;">Ingen deltager endnu</div>';
+      return;
+    }
+
+    list.innerHTML = participants.map((p, i) => {
+      const init = p.navn.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      const col = colors[i % colors.length];
+      return `
+      <div style="background:white;border:1.5px solid var(--border);border-radius:10px;padding:16px;display:flex;gap:12px;align-items:flex-start;">
+        <div style="width:40px;height:40px;border-radius:50%;background:${col};color:white;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">${init}</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:1rem;">${p.navn}</div>
+          <div style="color:var(--muted);font-size:0.9rem;">${p.alder} år • ${p.niveau}</div>
+          ${p.makker ? `<div style="color:var(--green);font-size:0.9rem;margin-top:4px;">🤝 Ønsker makker: ${p.makker}</div>` : ''}
+        </div>
+        <button onclick="window.deleteParticipant('${p._key}')" style="background:#e53935;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Slet</button>
+      </div>
+    `;
+    }).join('');
+  }
+
+  window.deleteParticipant = (key) => {
+    const p = participants.find(x => x._key === key);
+    if (p && confirm(`Slet ${p.navn}?`)) {
+      remove(ref(db, 'participants/' + key));
+      renderAdminDashboard();
+    }
+  };
+
   function updateAdminUI() {
     const btn = document.getElementById('adminBtn');
-    const input = document.getElementById('adminPasswordInput');
-    if (input) input.remove();
-
     if (window.isAdmin) {
-      btn.textContent = '🔓 Admin';
-      btn.style.background = 'rgba(76, 175, 80, 0.3)';
       btn.onclick = window.logoutAdmin;
     } else {
-      btn.textContent = '🔒 Admin';
-      btn.style.background = 'rgba(255,255,255,0.2)';
       btn.onclick = window.openAdminLogin;
     }
   }
-  // Restore admin status on load
-  if (localStorage.getItem('padel_admin') === 'true') window.isAdmin = true;
-
   // ── Render ─────────────────────────────────────────────────────────────────
   function render() {
     const list  = document.getElementById('participantList');
