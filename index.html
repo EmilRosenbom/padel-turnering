@@ -19,7 +19,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--green-pale); color: var(--text); min-height: 100vh; }
-    header { background: var(--green); color: white; padding: 24px 20px 20px; text-align: center; }
+    header { background: var(--green); color: white; padding: 24px 20px 20px; text-align: center; position: relative; }
     header h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; }
     header p { margin-top: 6px; opacity: 0.85; font-size: 0.95rem; }
     .badge { display: inline-block; background: var(--yellow); color: #333; font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-top: 10px; }
@@ -93,6 +93,7 @@
   <h1>🎾 Paddeltennis Turnering</h1>
   <p>Lørdag kl. 12:00</p>
   <span class="badge">Tilmeld dig herunder</span>
+  <button id="adminBtn" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.2);color:white;border:1px solid white;padding:6px 12px;border-radius:6px;font-size:0.8rem;cursor:pointer;transition:all 0.15s;" onclick="openAdminLogin()">🔒 Admin</button>
 </header>
 
 <main>
@@ -180,6 +181,17 @@
 
 <div id="toast" class="toast"></div>
 
+<div id="adminModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:12px;padding:24px;max-width:300px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+    <h3 style="margin-bottom:16px;color:#333;">Admin Login</h3>
+    <input type="password" id="adminPassword" placeholder="Adgangskode" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;margin-bottom:12px;font-size:0.95rem;" />
+    <div style="display:flex;gap:8px;">
+      <button onclick="loginAdmin()" style="flex:1;background:#2d7a3a;color:white;border:none;padding:10px;border-radius:8px;font-weight:600;cursor:pointer;">Login</button>
+      <button onclick="closeAdminModal()" style="flex:1;background:#f0f0f0;border:none;padding:10px;border-radius:8px;font-weight:600;cursor:pointer;">Luk</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
   import { getDatabase, ref, push, remove, onValue, serverTimestamp }
@@ -199,6 +211,8 @@
   const colors = ['#2d7a3a','#1565c0','#6a1b9a','#c62828','#e65100','#00695c','#4527a0','#ad1457','#37474f','#558b2f'];
   let participants = [];
   let currentTeams = [];
+  window.isAdmin = false;
+  const ADMIN_PASSWORD = 'Admin2026!';
 
   // ── Status ─────────────────────────────────────────────────────────────────
   function setStatus(state, msg) {
@@ -208,6 +222,9 @@
 
   // Update share URL
   document.getElementById('shareUrl').textContent = 'https://emilvon1.github.io/padel-turnering/';
+
+  // Initialize admin UI
+  updateAdminUI();
 
   // ── Live listener ──────────────────────────────────────────────────────────
   setStatus('connecting','Forbinder...');
@@ -245,6 +262,50 @@
     showToast('Deltager fjernet');
   };
 
+  // ── Admin functions ───────────────────────────────────────────────────────
+  window.openAdminLogin = () => {
+    document.getElementById('adminModal').style.display = 'flex';
+    document.getElementById('adminPassword').focus();
+  };
+  window.closeAdminModal = () => {
+    document.getElementById('adminModal').style.display = 'none';
+    document.getElementById('adminPassword').value = '';
+  };
+  window.loginAdmin = () => {
+    const pwd = document.getElementById('adminPassword').value;
+    if (pwd === ADMIN_PASSWORD) {
+      window.isAdmin = true;
+      localStorage.setItem('padel_admin', 'true');
+      showToast('✅ Admin login velykket');
+      updateAdminUI();
+      render();
+      closeAdminModal();
+    } else {
+      showToast('❌ Forkert adgangskode');
+    }
+  };
+  window.logoutAdmin = () => {
+    window.isAdmin = false;
+    localStorage.removeItem('padel_admin');
+    updateAdminUI();
+    render();
+    showToast('Logget ud');
+  };
+  function updateAdminUI() {
+    const btn = document.getElementById('adminBtn');
+    if (window.isAdmin) {
+      btn.textContent = '🔓 Admin (logget ind)';
+      btn.style.background = 'rgba(76, 175, 80, 0.3)';
+      btn.onclick = window.logoutAdmin;
+    } else {
+      btn.textContent = '🔒 Admin';
+      btn.style.background = 'rgba(255,255,255,0.2)';
+      btn.onclick = window.openAdminLogin;
+    }
+  }
+  // Restore admin status on load
+  if (localStorage.getItem('padel_admin') === 'true') window.isAdmin = true;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   function render() {
     const list  = document.getElementById('participantList');
@@ -255,14 +316,15 @@
       const init = p.navn.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
       const col  = colors[i % colors.length];
       const tag  = {Ny:'tag-ny',Begynder:'tag-begynder',Øvet:'tag-øvet'}[p.niveau]||'tag-ny';
+      const makkerText = window.isAdmin && p.makker ? ' · Ønsker: '+p.makker : '';
       return `<div class="participant">
         <div class="avatar" style="background:${col}">${init}</div>
         <div class="participant-info">
           <div class="participant-name">${p.navn}</div>
-          <div class="participant-meta">${p.alder} år${p.makker?' · Ønsker: '+p.makker:''}</div>
+          <div class="participant-meta">${p.alder} år${makkerText}</div>
         </div>
         <span class="level-tag ${tag}">${p.niveau}</span>
-        <button class="delete-btn" onclick="removeParticipant('${p._key}')" title="Fjern">✕</button>
+        ${window.isAdmin ? `<button class="delete-btn" onclick="removeParticipant('${p._key}')" title="Fjern">✕</button>` : ''}
       </div>`;
     }).join('');
   }
