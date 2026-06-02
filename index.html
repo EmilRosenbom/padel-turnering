@@ -1149,6 +1149,41 @@
     if (m.timer) m.timer.running = false;
     if (timerIntervals[m.id]) { clearInterval(timerIntervals[m.id]); delete timerIntervals[m.id]; }
     advanceWinners();
+    autoReassignToFreeCourt(m.court);
+  }
+
+  // When a court goes idle after a match, pull in the earliest scheduled match
+  // that is stuck waiting on a busy court (or any scheduled match not yet placed
+  // on this court). This prevents courts sitting empty while matches queue up elsewhere.
+  function autoReassignToFreeCourt(freedCourt) {
+    const courtFree = !allMatches.some(m =>
+      m.court === freedCourt && (m.status === 'in-progress' || m.status === 'scheduled'));
+    if (!courtFree) return;
+
+    // Prefer scheduled matches whose original court still has a live match running.
+    // Fall back to any other scheduled match not yet on the free court.
+    const busyCourts = new Set(
+      allMatches.filter(m => m.status === 'in-progress').map(m => m.court)
+    );
+    const candidates = allMatches
+      .filter(m => m.status === 'scheduled' && m.court !== freedCourt)
+      .sort((a, b) => a.id - b.id);
+
+    const blocked = candidates.find(m => busyCourts.has(m.court));
+    const pick = blocked || candidates[0];
+    if (!pick) return;
+
+    const oldCourt = pick.court;
+    pick.court = freedCourt;
+    if (pick.timer) { pick.timer.remaining = pick.timer.duration; pick.timer.running = false; pick.timer.startedAt = null; }
+    showToast(`${getTeamNames(pick.teamA)} vs ${getTeamNames(pick.teamB)} → Bane ${freedCourt}`);
+    // If the match was previously assigned to a court the referee isn't watching,
+    // add the freed court to their active set so it shows up immediately.
+    if (!refereeCourts.includes(freedCourt)) refereeCourts.push(freedCourt);
+    // Remove the old court if it now has no more matches.
+    const oldCourtStillHasWork = allMatches.some(m =>
+      m.court === oldCourt && (m.status === 'in-progress' || m.status === 'scheduled'));
+    if (!oldCourtStillHasWork) refereeCourts = refereeCourts.filter(c => c !== oldCourt);
   }
 
   window.refFinishMatch = (matchId) => {
