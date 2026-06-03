@@ -121,8 +121,8 @@
     .match-num { font-size: 0.68rem; color: var(--muted); font-weight: 600; margin-bottom: 4px; text-align: center; }
     .empty-state { text-align: center; color: var(--muted); padding: 28px 16px; font-size: 0.9rem; line-height: 1.5; }
     .empty-state .empty-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
-    .empty-state .empty-title { font-weight: 700; color: var(--text); font-size: 0.95rem; }
-    .empty-state .empty-sub { font-size: 0.82rem; margin-top: 4px; }
+    .empty-state .empty-title { font-weight: 700; color: var(--text); font-size: 0.95rem; display: block; }
+    .empty-state .empty-sub { font-size: 0.82rem; margin-top: 4px; display: block; }
     .toast { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(80px); opacity: 0; background: #1a1a1a; color: white; padding: 12px 22px; border-radius: 30px; font-size: 0.88rem; font-weight: 600; transition: transform 250ms cubic-bezier(0.23, 1, 0.32, 1), opacity 250ms cubic-bezier(0.23, 1, 0.32, 1); z-index: 99999; pointer-events: none; white-space: nowrap; max-width: calc(100vw - 40px); }
     .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; transition: transform 250ms cubic-bezier(0.23, 1, 0.32, 1), opacity 200ms ease; }
     .toast.hide { transform: translateX(-50%) translateY(80px); opacity: 0; transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 150ms ease; }
@@ -575,7 +575,8 @@
     <h1 style="font-size:2rem;margin-bottom:10px;color:#e65100;">🏁 Dommer-login</h1>
     <p style="color:#aaa;margin-bottom:30px;">Log ind for at holde styr på scoren</p>
     <input type="email" id="refLoginEmail" placeholder="Email" style="width:100%;padding:12px;border:1.5px solid #333;border-radius:8px;margin-bottom:12px;font-size:1rem;background:#0f3460;color:white;" />
-    <input type="password" id="refLoginPassword" placeholder="Adgangskode" style="width:100%;padding:12px;border:1.5px solid #333;border-radius:8px;margin-bottom:16px;font-size:1rem;background:#0f3460;color:white;" />
+    <input type="password" id="refLoginPassword" placeholder="Adgangskode" style="width:100%;padding:12px;border:1.5px solid #333;border-radius:8px;margin-bottom:12px;font-size:1rem;background:#0f3460;color:white;" />
+    <div id="refLoginError" style="display:none;color:#ff6b6b;font-size:0.88rem;margin-bottom:12px;padding:10px 12px;background:rgba(255,107,107,0.1);border-radius:6px;border:1px solid rgba(255,107,107,0.3);"></div>
     <button id="refLoginBtn" style="width:100%;padding:13px;background:#e65100;color:white;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;">Log ind som dommer</button>
     <button onclick="document.getElementById('refereeLoginScreen').style.display='none'" style="width:100%;padding:13px;background:transparent;color:#e65100;border:2px solid #e65100;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;margin-top:10px;">Tilbage</button>
   </div>
@@ -1155,7 +1156,9 @@
   async function loginReferee() {
     const email = document.getElementById('refLoginEmail').value.trim();
     const pwd = document.getElementById('refLoginPassword').value;
-    if (!email || !pwd) return showToast('Udfyld alle felter');
+    const errEl = document.getElementById('refLoginError');
+    errEl.style.display = 'none';
+    if (!email || !pwd) { errEl.textContent = 'Udfyld alle felter'; errEl.style.display = 'block'; return; }
     const btn = document.getElementById('refLoginBtn');
     btn.disabled = true; btn.textContent = 'Logger ind...';
     try {
@@ -1165,7 +1168,7 @@
       showRefCourtSelector();
       document.getElementById('refereeDashboard').classList.add('active');
       showToast('Dommer logget ind');
-    } catch(err) { showToast('Fejl: ' + (err.code === 'auth/invalid-credential' ? 'Forkert adgangskode' : err.message)); }
+    } catch(err) { errEl.textContent = err.code === 'auth/invalid-credential' ? 'Forkert email eller adgangskode' : 'Login fejlede — prøv igen'; errEl.style.display = 'block'; }
     btn.disabled = false; btn.textContent = 'Log ind som dommer';
   }
 
